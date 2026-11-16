@@ -226,3 +226,32 @@ func TestScanRequiresItsOptions(t *testing.T) {
 		t.Fatal("empty options must be an error")
 	}
 }
+
+// An inline allow marker with a reason also exempts a structural finding
+// on its line, and counts as silencing something when a structural rule
+// fires there; gitleaks never fires on those rules (found wiring the scan
+// into a repository whose test database URL is a fixture).
+func TestMarkersCoverStructuralFindings(t *testing.T) {
+	r := newRepo(t)
+	r.write("ok.sh", fakeDBURL+" # "+marker+" a disposable test database\n")
+	r.write("bare.sh", fakeDBURL+" # "+marker+"\n")
+	r.commit("fixtures")
+	res, err := Scan(scanOpts(t, r, "", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, f := range res.Findings {
+		got[f.Path+" "+f.Rule] = true
+	}
+	for _, want := range []string{"bare.sh " + RuleURLPassword, "bare.sh " + RuleMarkerNoReason} {
+		if !got[want] {
+			t.Errorf("missing %s; findings %v", want, res.Findings)
+		}
+	}
+	for _, not := range []string{"ok.sh " + RuleURLPassword, "ok.sh " + RuleMarkerSilencesNothing} {
+		if got[not] {
+			t.Errorf("unexpected %s; findings %v", not, res.Findings)
+		}
+	}
+}

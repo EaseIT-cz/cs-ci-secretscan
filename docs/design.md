@@ -80,9 +80,13 @@ and a rule. It runs gitleaks at `--log-level debug` and refuses `trace`.
     `errored_test.tfstate`: caches a gitleaks config commonly allowlists by
     path, so a committed file there would never be scanned.
 - **Markers.** gitleaks' inline allow marker (the word `gitleaks`, a colon,
-  `allow`) must be followed by its reason, and must sit on a line a scan with
-  `--ignore-gitleaks-allow` reports. One that silences nothing is a standing
-  permission for whatever a later edit puts on that line.
+  `allow`) must be followed by its reason. A reasoned marker exempts its
+  line from gitleaks and from the structural checks alike, since gitleaks
+  never fires on the structural rules and a fixture such as a disposable
+  test database's URL needs one way to be exempted. A marker must sit on a
+  line where some layer 1 rule fires: gitleaks run with
+  `--ignore-gitleaks-allow`, or a structural check. One that silences
+  nothing is a standing permission for whatever a later edit puts there.
 - **The report** (`layer1.jsonl`): per finding its fingerprint, path, start
   and end line, rule, and masked context. No gitleaks `Line`, `Match` or
   `Secret` field.

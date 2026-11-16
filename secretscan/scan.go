@@ -78,6 +78,9 @@ type scanner struct {
 	head    string
 	paths   []string // tracked paths
 	markLns map[Loc]string
+	// structFired holds the tree lines where a structural rule fired but a
+	// reasoned marker exempted it; the marker check counts them as fired.
+	structFired map[Loc]bool
 }
 
 func (s *scanner) setup() error {
@@ -407,6 +410,7 @@ func (s *scanner) checker() Checker {
 func (s *scanner) structural() error {
 	c := s.checker()
 	s.markLns = map[Loc]string{}
+	s.structFired = map[Loc]bool{}
 	for _, p := range s.paths {
 		s.addAll(c.CheckPath(p))
 		fi, err := os.Lstat(filepath.Join(s.treeDir, p))
@@ -458,13 +462,28 @@ func (s *scanner) structural() error {
 func (s *scanner) checkLines(c Checker, path string, first int, content []byte, tree bool) {
 	for i, l := range strings.Split(string(content), "\n") {
 		s.res.StructuralLines++
-		for _, f := range c.CheckLine(l) {
-			s.add(Finding{Path: path, Line: first + i, Rule: f.Rule})
+		loc := Loc{path, first + i}
+		fs := c.CheckLine(l)
+		if len(fs) > 0 && hasReasonedMarker(l) {
+			// A reasoned marker exempts the line's structural findings,
+			// as it exempts gitleaks', and is thereby shown to be needed.
+			if tree {
+				s.structFired[loc] = true
+			}
+			fs = nil
+		}
+		for _, f := range fs {
+			s.add(Finding{Path: path, Line: loc.Line, Rule: f.Rule})
 		}
 		if tree && strings.Contains(l, marker) {
-			s.markLns[Loc{path, first + i}] = l
+			s.markLns[loc] = l
 		}
 	}
+}
+
+func hasReasonedMarker(l string) bool {
+	i := strings.Index(l, marker)
+	return i >= 0 && strings.TrimSpace(l[i+len(marker):]) != ""
 }
 
 var hunkRe = regexp.MustCompile(`^@@ -[0-9,]+ \+([0-9]+)`)
@@ -497,6 +516,9 @@ func (s *scanner) markers() error {
 		return err
 	}
 	fired := map[Loc]bool{}
+	for loc := range s.structFired {
+		fired[loc] = true
+	}
 	for _, f := range fs {
 		fired[Loc{f.File, f.StartLine}] = true
 	}

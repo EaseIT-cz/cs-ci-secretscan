@@ -119,16 +119,20 @@ func (v *Vornik) Wait(ctx context.Context, task string) (map[string]any, error) 
 			return nil, err
 		}
 		var r struct {
-			Complete bool           `json:"complete"`
-			Status   string         `json:"status"`
-			Output   map[string]any `json:"output"`
+			Complete    bool           `json:"complete"`
+			Status      string         `json:"status"`
+			Output      map[string]any `json:"output"`
+			EgressError string         `json:"egress_error"`
 		}
 		if err := json.Unmarshal([]byte(text), &r); err != nil {
 			return nil, fmt.Errorf("vornik result: unreadable")
 		}
 		if r.Complete {
+			if r.EgressError != "" {
+				return nil, fmt.Errorf("Vornik withheld its output (%s)", firstLine(r.EgressError))
+			}
 			if r.Status != "COMPLETED" || r.Output == nil {
-				return nil, fmt.Errorf("vornik task ended %s", r.Status)
+				return nil, fmt.Errorf("vornik task ended %s with no output", r.Status)
 			}
 			out, err := unwrapAll(r.Output)
 			if err != nil {

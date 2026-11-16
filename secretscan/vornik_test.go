@@ -94,3 +94,19 @@ func TestVornikRefusesAWrongKeyAndAnUnwrappedString(t *testing.T) {
 		t.Fatal("an unwrapped string must be refused")
 	}
 }
+
+// A task whose output Vornik refused is reported by its egress error
+// class (found at: e2e-lane, the planted pull request: a hunter's output
+// broke its schema and the comment said only "task ended COMPLETED").
+func TestWaitReportsAnEgressRefusal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		text := `{"complete":true,"status":"COMPLETED","output":null,"egress_error":"egress_schema"}`
+		resp, _ := json.Marshal(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}}})
+		w.Write(resp)
+	}))
+	defer srv.Close()
+	_, err := (&Vornik{URL: srv.URL, Token: "k"}).Wait(context.Background(), "t")
+	if err == nil || !strings.Contains(err.Error(), "egress_schema") {
+		t.Fatalf("got %v, want an error naming egress_schema", err)
+	}
+}

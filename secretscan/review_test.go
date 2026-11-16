@@ -117,3 +117,26 @@ func TestRunReviewFailsOpenWhenVornikIsDown(t *testing.T) {
 		t.Fatalf("comment does not say so:\n%s", c)
 	}
 }
+
+// When the base branch moved on after the change branched, the change's
+// diff is from their merge base: base..head would also show the base's
+// later changes, reversed, as if the change made them (found writing the
+// pull_request_target workflow).
+func TestChangeDiffIsFromTheMergeBase(t *testing.T) {
+	r := newRepo(t)
+	r.write("a.go", "package a\n")
+	r.commit("root")
+	r.git("checkout", "-q", "-b", "feature")
+	r.write("b.go", "package a\n\nvar fromTheChange = 1\n")
+	head := r.commit("change")
+	r.git("checkout", "-q", "main")
+	r.write("c.go", "package a\n\nvar fromTheBase = 2\n")
+	base := r.commit("base moved on")
+	d, _, err := changeDiff(Options{Repo: r.dir, Base: base, Head: head}, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(d, "fromTheChange") || strings.Contains(d, "fromTheBase") {
+		t.Fatalf("diff is not the change's alone:\n%s", d)
+	}
+}

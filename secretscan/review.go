@@ -243,7 +243,7 @@ func changeDiff(o Options, max int) (string, []string, error) {
 	if head == "" {
 		head = "HEAD"
 	}
-	cmd := exec.Command("git", "-C", o.Repo, "diff", "--no-textconv", "--no-ext-diff", "--no-color", "-U3", o.Base+".."+head)
+	cmd := exec.Command("git", "-C", o.Repo, "diff", "--no-textconv", "--no-ext-diff", "--no-color", "-U3", o.Base+"..."+head)
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
 	out, err := cmd.Output()
 	if err != nil {

@@ -452,7 +452,7 @@ func (s *scanner) structural() error {
 	if s.o.Base == "" {
 		return nil
 	}
-	out, err := s.git(nil, "diff", "--no-textconv", "--no-ext-diff", "--no-color", "-U0", s.o.Base+".."+s.head)
+	out, err := s.git(nil, "diff", "--no-textconv", "--no-ext-diff", "--no-color", "-U0", s.o.Base+"..."+s.head)
 	if err != nil {
 		return err
 	}

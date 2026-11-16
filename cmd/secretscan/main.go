@@ -45,12 +45,19 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || (args[0] != "scan" && args[0] != "review") {
-		fmt.Fprintln(stderr, "usage: secretscan scan|review --repo DIR [flags]")
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: secretscan scan|review|comment [flags]")
 		return 2
 	}
-	if args[0] == "review" {
+	switch args[0] {
+	case "review":
 		return runReview(args[1:], stdout, stderr)
+	case "comment":
+		return runComment(args[1:], stderr)
+	case "scan":
+	default:
+		fmt.Fprintln(stderr, "usage: secretscan scan|review|comment [flags]")
+		return 2
 	}
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(stderr)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -140,5 +141,17 @@ func TestReviewUsageAndFailOpen(t *testing.T) {
 	code := run([]string{"review", "--repo", dir, "--base", "HEAD", "--vornik-url", "http://127.0.0.1:1", "--prefix", "p--", "--gitleaks", gitleaksBin(t)}, &out, &errb)
 	if code != 0 || !strings.Contains(out.String(), "did not complete") {
 		t.Fatalf("no key: exit %d, want 0 with a did-not-complete comment:\n%s", code, out.String())
+	}
+}
+
+func TestCommentRefusesWhatReviewDidNotWrite(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "c.md")
+	os.WriteFile(f, []byte("hello, not a review comment"), 0o644)
+	var errb bytes.Buffer
+	if code := run([]string{"comment", "--file", f, "--pr", "1", "--repository", "o/r"}, io.Discard, &errb); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if code := run([]string{"comment"}, io.Discard, &errb); code != 2 {
+		t.Fatalf("usage: exit %d, want 2", code)
 	}
 }

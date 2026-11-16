@@ -177,24 +177,33 @@ func (c Checker) isAccountVar(n string) bool {
 	return false
 }
 
-// twelveDigitRuns returns every maximal run of exactly 12 decimal digits.
+// twelveDigitRuns returns every run of exactly 12 decimal digits whose
+// neighbours are neither letters nor digits. A run inside a hex digest or
+// a commit hash is bounded by hex letters and is not an id; an ARN's
+// colons and a bucket name's dashes are boundaries.
 func twelveDigitRuns(s string) []string {
 	var out []string
 	for i := 0; i < len(s); {
-		if s[i] < '0' || s[i] > '9' {
+		if !isDigit(s[i]) {
 			i++
 			continue
 		}
 		j := i
-		for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		for j < len(s) && isDigit(s[j]) {
 			j++
 		}
-		if j-i == 12 {
+		if j-i == 12 && (i == 0 || !isAlnum(s[i-1])) && (j == len(s) || !isAlnum(s[j])) {
 			out = append(out, s[i:j])
 		}
 		i = j
 	}
 	return out
+}
+
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
+func isAlnum(c byte) bool {
+	return isDigit(c) || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 // ScanLog is what a gitleaks run at --log-level debug reports about its

@@ -96,20 +96,25 @@ func TestCheckLine(t *testing.T) {
 		"111122223333\tAWS documentation example\n333333333333\trepeated-digit test id\n"))
 	c := Checker{Accounts: accounts, AccountVars: []string{"154480844551"}}
 	for line, want := range map[string][]string{
-		pemBegin + "RSA PRIVATE KEY-----":                     {RulePEMKey},
-		pemBegin + "PRIVATE KEY-----":                         {RulePEMKey},
-		pemBegin + "OPENSSH PRIVATE KEY-----":                 {RulePEMKey},
-		pemBegin + "ENCRYPTED PRIVATE KEY-----":               {RulePEMKey},
-		"-----BEGIN CERTIFICATE-----":                         nil,
-		fakeDBURL:                                             {RuleURLPassword},
-		"https://user@example.com/path":                       nil,
-		"see https://example.com/a@b and https://x.example/":  nil,
-		`partner_account_id = "359545463725"`:                 {RuleAccountID},
-		"arn:aws:iam::111122223333:role/x":                    nil,
-		"bucket-333333333333":                                 nil,
-		"id 154480844551 in a comment":                        {RuleAccountID},
-		"a 13-digit number 3595454637251 is not an id":        nil,
-		"sha a25d5e5bf684845d5ee99fa21cd50892138bdfdfd28d447": nil,
+		pemBegin + "RSA PRIVATE KEY-----":                    {RulePEMKey},
+		pemBegin + "PRIVATE KEY-----":                        {RulePEMKey},
+		pemBegin + "OPENSSH PRIVATE KEY-----":                {RulePEMKey},
+		pemBegin + "ENCRYPTED PRIVATE KEY-----":              {RulePEMKey},
+		"-----BEGIN CERTIFICATE-----":                        nil,
+		fakeDBURL:                                            {RuleURLPassword},
+		"https://user@example.com/path":                      nil,
+		"see https://example.com/a@b and https://x.example/": nil,
+		`partner_account_id = "359545463725"`:                {RuleAccountID},
+		"arn:aws:iam::111122223333:role/x":                   nil,
+		"bucket-333333333333":                                nil,
+		"id 154480844551 in a comment":                       {RuleAccountID},
+		"a 13-digit number 3595454637251 is not an id":       nil,
+		// A 12-digit run inside a hex digest or commit hash is not an id
+		// (found scanning a real repository: a sha256 and a commit sha).
+		"sha256 = 255caa621e14d3b17daab493df8684b448123456732e3": nil,
+		"commit: fbb28ee632baa5014f865123456720d9408ff70e":       nil,
+		"bucket = vornik-tfstate-359545463725":                   {RuleAccountID},
+		"sha a25d5e5bf684845d5ee99fa21cd50892138bdfdfd28d447":    nil,
 	} {
 		got := rules(c.CheckLine(line))
 		if strings.Join(got, ",") != strings.Join(want, ",") {

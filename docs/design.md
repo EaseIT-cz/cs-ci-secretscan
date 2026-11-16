@@ -10,12 +10,14 @@ development host, unless marked.
 `secretscan` runs a repository's secret scan in four layers. gitleaks alone
 misses whole classes of leak and can report clean without having looked.
 secretscan wraps it with checks that can fail, counts that must balance, and
-an optional model review that may only comment.
+Vornik's model review team, whose findings deterministic checks verify. The
+case study's frame: Vornik in companion mode builds the scan, and Vornik's
+autonomous execution operates its model layer on every change.
 
 | layer | what | kind | effect |
 |---|---|---|---|
 | 1 | gitleaks, structural checks, checked denominators | deterministic | fails the scan |
-| 2 | a model review of the masked diff (optional, through Vornik) | model | a pull-request comment only |
+| 2 | Vornik's review team on the masked diff | model | a pull-request comment |
 | 3 | a check of every layer 2 claim and reason | deterministic | drops what it cannot tie to the diff |
 | 4 | a planted set that measures layers 1 to 3 | deterministic harness | fails a scheduled run |
 
@@ -96,7 +98,7 @@ line without exactly one tab, an empty field or a duplicate is an error.
 Three ledgers: `accounts.allow` (12-digit values), `names.allow` (key-file
 paths), `skip.allow` (paths exempt from the stdin rescan).
 
-## 4. Layer 2: the masked model review (optional)
+## 4. Layer 2: Vornik's review of the masked diff
 
 **The mask** (`secretscan mask`) anchors on lines, not gitleaks' columns
 (§2). For each layer 1 finding, on every line from its start to its end line,

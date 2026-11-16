@@ -1,10 +1,22 @@
 # cs-ci-secretscan
 
-**A case study: using Vornik to build and operate CI secret scanning.**
-`secretscan` runs a repository's secret scan in four layers around
-[gitleaks](https://github.com/gitleaks/gitleaks): deterministic checks that
-can fail and counts that must balance, plus an optional model review that
-may only comment.
+**A case study: using [Vornik](https://vornik.io) to build and operate CI
+secret scanning.**
+
+`secretscan` runs a repository's secret scan in four layers. Deterministic
+checks around [gitleaks](https://github.com/gitleaks/gitleaks) catch what
+rules can see and prove what they examined. Vornik's team of four model
+roles, each on a different model, reviews every change for what rules
+cannot see: a key split across two strings, a credential in a fixture, a
+secret moved into a comment. Deterministic checks then verify every claim
+the models make.
+
+Vornik is used in both of its modes:
+- **companion mode built it:** an assistant wired to Vornik designed,
+  reviewed and implemented this, with Vornik's delegated reviews, project
+  memory and admin tools;
+- **autonomous execution operates it:** on every pull request, Vornik runs
+  the review team as broker workflows, triggered from CI with a scoped key.
 
 ## Why
 
@@ -21,7 +33,7 @@ Measured with gitleaks 8.30.1 (details in [docs/design.md](docs/design.md) §2):
 | layer | what | effect |
 |---|---|---|
 | 1 | gitleaks over the index, the history and the change, plus structural checks; the tree's bytes must balance and the commit counts must match git's | fails the scan |
-| 2 | the change's diff, masked and proved masked, reviewed by four model roles through [Vornik](https://vornik.io) | a pull-request comment only |
+| 2 | Vornik's review team (two independent hunters, a triager, an adjudicator) reads the change's diff, masked and proved masked | a pull-request comment |
 | 3 | every model claim and reason checked against the diff, deterministically | drops what it cannot tie to the diff |
 | 4 | a planted set of fake secrets and decoys that measures layers 1 to 3 | fails a scheduled run |
 

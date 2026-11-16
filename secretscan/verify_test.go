@@ -150,3 +150,20 @@ func TestEntropyFloorTableCoversEveryLength(t *testing.T) {
 		}
 	}
 }
+
+// A hunter may describe a split hex signing key as private_key: the class
+// is the model's description, and the shape check only asks whether the
+// line holds something credential-shaped (found at: e2e-lane, the planted
+// pull request: both halves of the split key were claimed as private_key,
+// correctly, and dropped as "no shape").
+func TestShapeIsCheckedByFamily(t *testing.T) {
+	d := ParseDiff("diff --git a/k.go b/k.go\n--- a/k.go\n+++ b/k.go\n@@ -0,0 +1,3 @@\n+\tpart1 := \"5b763fa254f83feb3fab\"\n+\tpart2 := \"0a83410be2a9a93800f6\"\n+\tname := \"hello\"\n")
+	r := Verify([]Claim{
+		{Path: "k.go", Line: 1, Class: "private_key", Reason: "first half of a split signing key", By: "b"},
+		{Path: "k.go", Line: 2, Class: "private_key", Reason: "second half", By: "b"},
+		{Path: "k.go", Line: 3, Class: "private_key", Reason: "a word", By: "b"},
+	}, d)
+	if len(r.Candidates) != 2 || r.Dropped["no shape"] != 1 {
+		t.Fatalf("candidates %+v dropped %v", r.Candidates, r.Dropped)
+	}
+}

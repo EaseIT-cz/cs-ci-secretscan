@@ -70,7 +70,7 @@ func Verify(claims []Claim, d ParsedDiff) VerifyResult {
 			r.Dropped["not an added line"]++
 		case alreadyRed.MatchString(l.Text):
 			r.Dropped["masked line"]++
-		case c.Class != "other" && !hasShape(c.Class, l.Text):
+		case c.Class != "other" && !hasFamilyShape(c.Class, l.Text):
 			r.Dropped["no shape"]++
 		default:
 			ok = append(ok, kept{c, l.Text})
@@ -148,6 +148,20 @@ var (
 	hostRe     = regexp.MustCompile(`\b[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+\b`)
 	emailRe    = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
 )
+
+// hasFamilyShape reports whether a line has the shape of any class in the
+// claim's family. A class is the model's description (a split hex signing
+// key is fairly called private_key); the check asks only whether the line
+// holds something of the family's shape (found at e2e-lane).
+func hasFamilyShape(class, line string) bool {
+	fam := families[class]
+	for c, f := range families {
+		if f == fam && c != "other" && hasShape(c, line) {
+			return true
+		}
+	}
+	return false
+}
 
 // hasShape reports whether a line has the shape of a class.
 func hasShape(class, line string) bool {

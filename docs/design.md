@@ -150,7 +150,10 @@ Whether that is acceptable is each consumer's decision.
 **A claim survives only if** its path is in the diff, its line is an added
 line, the line was not masked (a masked token is a layer 1 finding or a
 listed 12-digit value; a claim on it is a counted duplicate), and the
-unmasked line has the shape of the class:
+unmasked line has the shape of some class **in the claim's family**. A class
+is the model's description: on a planted pull request both hunters'
+claims on a split hex signing key were labelled `private_key`, correctly,
+and a per-class check dropped them (measured 2026-11-16). The shapes:
 - `cloud_account_id`: 12 digits, or 12 split by `-` or spaces;
 - `connection_string`: `scheme://…@`;
 - `encoded_blob`: base64 (standard or URL-safe, padding inside) of 16 or more

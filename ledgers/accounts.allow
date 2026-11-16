@@ -1,0 +1,6 @@
+# 12-digit values that are not findings: each with its reason.
+111122223333	AWS documentation example account id, used as a test fixture
+123456789012	AWS documentation example account id, used as a test fixture
+333333333333	repeated-digit fake account id, test fixture
+359545463725	fake account id generated for the planted-set tests
+154480844551	fake account id standing for a consumer account variable in tests

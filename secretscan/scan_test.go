@@ -255,3 +255,28 @@ func TestMarkersCoverStructuralFindings(t *testing.T) {
 		}
 	}
 }
+
+// A skip-ledgered go.sum is still read: every line must have go.sum's
+// grammar, so a value planted there is a finding although the file is
+// exempt from the stdin rescan (found in review: an exempt file is
+// otherwise a total blind spot).
+func TestExemptGoSumMustKeepItsGrammar(t *testing.T) {
+	r := newRepo(t)
+	r.write("go.mod", "module example.invalid/x\n")
+	r.write("go.sum", "example.invalid/y v1.0.0 h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nexample.invalid/y v1.0.0/go.mod h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\n")
+	r.commit("clean")
+	o := scanOpts(t, r, "", "")
+	o.Skip, _ = ParseLedger("skip.allow", strings.NewReader("go.sum\tmodule hashes\n"))
+	if res, err := Scan(o); err != nil || len(res.Findings) != 0 {
+		t.Fatalf("a well-formed go.sum: %v %v", res, err)
+	}
+	r.write("go.sum", "example.invalid/y v1.0.0 h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nTOKEN="+fakeToken(t)+"\n")
+	r.commit("planted")
+	res, err := Scan(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := byRule(res.Findings)[RuleGoSumFormat]; len(got) != 1 || got[0] != "go.sum" {
+		t.Fatalf("findings %v, want one %s in go.sum", res.Findings, RuleGoSumFormat)
+	}
+}

@@ -96,20 +96,27 @@ and a rule. It runs gitleaks at `--log-level debug` and refuses `trace`.
 **Ledgers.** Plain text, one `<value>\t<reason>` per line, `#` comments. A
 line without exactly one tab, an empty field or a duplicate is an error.
 Three ledgers: `accounts.allow` (12-digit values), `names.allow` (key-file
-paths), `skip.allow` (paths exempt from the stdin rescan).
+paths), `skip.allow` (paths exempt from the stdin rescan). A `go.sum` on the
+skip ledger is still read: every line must have go.sum's grammar, or it is
+a finding (`go-sum-format`), so the exemption is not a blind spot.
 
 ## 4. Layer 2: Vornik's review of the masked diff
 
-**The mask** (`secretscan mask`) anchors on lines, not gitleaks' columns
-(§2). For each layer 1 finding, on every line from its start to its end line,
-it replaces with `[REDACTED:<rule>]` each whitespace- or quote-delimited
-token the finding's span, widened by one character each side, overlaps. It
-replaces every run of 12 digits, plain or split by `-` or spaces, with
-`[REDACTED:account-id]`. It applies the same to `layer1.jsonl`'s context.
-**It then proves the mask held:** gitleaks and the structural checks run
-again over the masked diff and the masked report. Any finding refuses the
-send. A diff is cut at file boundaries into runs of at most 256 KiB; a file
-over the cap is reported not examined.
+**The mask** anchors on lines and tokens, not gitleaks' exact columns (§2).
+It scans the diff itself, as a stream, with gitleaks and the structural
+checks, rather than mapping layer 1's findings onto it. For each finding it
+replaces with `[REDACTED:<rule>]` each token (split at whitespace, quotes,
+`=` and backticks) that the finding's span, widened by one character each
+side, overlaps; a line's leading `+`, `-` or space is kept, and so is the
+line count, so line numbers still match. It replaces every run of 12
+digits, plain or split by `-` or spaces, with `[REDACTED:account-id]`.
+**It then proves the mask held:** it rescans and repeats, up to five
+rounds, until a rescan finds nothing; a rescan that still finds something
+after five refuses the send. Triage's report of layer 1's findings carries
+each finding's masked diff line as context, never a gitleaks value field,
+and is rescanned too, as is the adjudicator's bundle. A diff is cut at file
+boundaries to at most 256 KiB; a file that does not fit is reported not
+examined.
 
 **The review** (`secretscan review`) sends the masked diff to four Vornik
 broker workflows, each one role on its own model: two independent hunters,
@@ -151,17 +158,20 @@ unmasked line has the shape of the class:
 **The entropy floor.** The alphabet is the first that holds the run: decimal,
 hex `[0-9a-fA-F]`, alphanumeric `[A-Za-z0-9_-]`, base64
 `[A-Za-z0-9+/=_-]`, printable (ASCII 33 to 126); any other character splits
-the run. Minimum lengths: 24 hex, 16 base64, 16 decimal, 12 alphanumeric or
-printable. The floor is the 1st percentile, by nearest rank, of 20,000
-uniformly random strings of that alphabet and length, seed 289, one cell for
-every length from the minimum to 64; a longer run uses the 64 cell.
+the run. Minimum lengths: 16 hex, 16 base64, 16 decimal, 12 alphanumeric or
+printable. (Hex is 16, not the 24 its 12-byte floor would give: each half
+of a key split across two string literals is 20 hex characters.) The floor is the 1st percentile, by nearest rank, of 20,000
+uniformly random strings of that alphabet and length, from Go's PCG
+generator seeded 289, one cell for every length from the minimum to 64; a
+longer run uses the 64 cell. `go run ./internal/gentable` writes the
+committed table, `secretscan/entropy_table.go`.
 
 | alphabet | 16 | 20 | 24 | 40 | 64 |
 |---|---|---|---|---|---|
-| decimal | 2.31 | 2.50 | 2.64 | 2.90 | 3.06 |
-| hex | 2.66 | 2.90 | 3.04 | 3.40 | 3.63 |
-| alphanumeric | 3.38 | 3.65 | 3.89 | 4.47 | 4.92 |
-| base64 | 3.38 | 3.68 | 3.91 | 4.48 | 4.96 |
+| decimal | 2.31 | 2.50 | 2.62 | 2.90 | 3.06 |
+| hex | 2.65 | 2.90 | 3.04 | 3.40 | 3.63 |
+| alphanumeric | 3.33 | 3.65 | 3.89 | 4.46 | 4.93 |
+| base64 | 3.38 | 3.68 | 3.89 | 4.48 | 4.96 |
 | printable | 3.45 | 3.78 | 4.02 | 4.65 | 5.16 |
 
 A flat 3.5-bit floor would drop 90% of 16-hex, 78% of 20-hex and 54% of
@@ -178,7 +188,8 @@ undecided claim is dropped and counted; a failed hunter caps confidence at
 `medium`.
 
 **A reason survives only if** it holds no 8-character run of its line's
-unmasked text and has no `@`, backtick, `<`, `>`, `|`, `[`, `]`, `://`, `//`
+unmasked value-shaped runs (8 or more characters that are not a plain
+lowercase word, so a word shared with the code is not an echo) and has no `@`, backtick, `<`, `>`, `|`, `[`, `]`, `://`, `//`
 or line break, and does not start with `-` or `#`; otherwise "(reason
 withheld)". At most 20 claims and 6,000 characters of model text reach a
 report; the rest is counted.
@@ -201,7 +212,7 @@ positive control.
 | subcommand | stage |
 |---|---|
 | `scan`: layer 1 | built in stage 1 |
-| `mask`, `verify`, `review`, `comment` | stage 2 |
+| `review`: layers 2 and 3 (mask, Vornik, verify, comment) | built in stage 2 |
 | `corpus` | stage 3 |
 
 Exit codes: 0 clean, 1 findings, 2 a tool or usage error (never "clean").

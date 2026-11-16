@@ -13,6 +13,18 @@
 //
 // Exit status: 0 clean, 1 findings, 2 a tool or usage error, which is
 // never a clean result.
+//
+//	secretscan review --repo DIR --base REV --head REV --vornik-url URL
+//	    --prefix NS--PROJECT-- [--pr N --repository OWNER/NAME] [--out FILE]
+//	    [--summary FILE] [scan flags]
+//
+// runs layers 2 and 3 (docs/design.md §4, §5): it masks the change's diff
+// and proves the mask, sends it to the four Vornik workflows named by
+// --prefix, checks every claim, and writes one comment. The Vornik key is
+// read from VORNIK_TOKEN and the GitHub token from GITHUB_TOKEN, never
+// from a flag, so neither is on a command line. With --pr it posts or
+// updates the pull request's comment. It exits 0 whatever layer 2 found or
+// failed to do: layer 2 comments only. Usage errors exit 2.
 package main
 
 import (
@@ -33,9 +45,12 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] != "scan" {
-		fmt.Fprintln(stderr, "usage: secretscan scan --repo DIR [flags]")
+	if len(args) == 0 || (args[0] != "scan" && args[0] != "review") {
+		fmt.Fprintln(stderr, "usage: secretscan scan|review --repo DIR [flags]")
 		return 2
+	}
+	if args[0] == "review" {
+		return runReview(args[1:], stdout, stderr)
 	}
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(stderr)

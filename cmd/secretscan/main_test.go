@@ -128,3 +128,17 @@ func TestRelativePathsWork(t *testing.T) {
 		t.Fatalf("relative --repo: exit %d\n%s", code, errb.String())
 	}
 }
+
+func TestReviewUsageAndFailOpen(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"review", "--repo", "."}, &out, &errb); code != 2 {
+		t.Fatalf("review without --base: exit %d, want 2", code)
+	}
+	dir := repoWith(t, map[string]string{"a.go": "package a\n"})
+	t.Setenv("VORNIK_TOKEN", "")
+	out.Reset()
+	code := run([]string{"review", "--repo", dir, "--base", "HEAD", "--vornik-url", "http://127.0.0.1:1", "--prefix", "p--", "--gitleaks", gitleaksBin(t)}, &out, &errb)
+	if code != 0 || !strings.Contains(out.String(), "did not complete") {
+		t.Fatalf("no key: exit %d, want 0 with a did-not-complete comment:\n%s", code, out.String())
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -254,6 +255,11 @@ func (s *scanner) tree() error {
 	for _, p := range sl.Skipped {
 		if s.o.Skip.Has(p) {
 			s.res.SkipExempt = append(s.res.SkipExempt, p)
+			if path.Base(p) == "go.sum" {
+				if err := s.checkGoSum(p); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 		if sizes[p] == 0 {
@@ -271,6 +277,26 @@ func (s *scanner) tree() error {
 			s.add(Finding{Path: p, Line: f.StartLine, Rule: f.RuleID})
 		}
 		s.res.StdinRescanned = append(s.res.StdinRescanned, p)
+	}
+	return nil
+}
+
+// goSumLine is go.sum's grammar: module, version (optionally /go.mod),
+// and an h1: hash of 44 base64 characters.
+var goSumLine = regexp.MustCompile(`^\S+ v\S+ h1:[A-Za-z0-9+/]{43}=$`)
+
+// checkGoSum reads an exempt go.sum line by line: an exemption from the
+// stdin rescan is not a blind spot, because any line outside go.sum's
+// grammar is a finding.
+func (s *scanner) checkGoSum(p string) error {
+	content, err := os.ReadFile(filepath.Join(s.treeDir, p))
+	if err != nil {
+		return err
+	}
+	for i, l := range strings.Split(strings.TrimRight(string(content), "\n"), "\n") {
+		if l != "" && !goSumLine.MatchString(l) {
+			s.add(Finding{Path: p, Line: i + 1, Rule: RuleGoSumFormat})
+		}
 	}
 	return nil
 }

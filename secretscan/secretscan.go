@@ -27,6 +27,7 @@ const (
 	RuleAccountID             = "account-id"
 	RuleMarkerNoReason        = "marker-without-reason"
 	RuleMarkerSilencesNothing = "marker-silences-nothing"
+	RuleGoSumFormat           = "go-sum-format"
 )
 
 // Finding is one layer 1 finding. It never holds the matched text.

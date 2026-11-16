@@ -37,7 +37,8 @@ Measured with gitleaks 8.30.1 (details in [docs/design.md](docs/design.md) §2):
 | 3 | every model claim and reason checked against the diff, deterministically | drops what it cannot tie to the diff |
 | 4 | a planted set of fake secrets and decoys that measures layers 1 to 3 | fails a scheduled run |
 
-Status: **layer 1 is built** (`secretscan scan`); layers 2 to 4 follow
+Status: **layers 1 to 3 are built**: `secretscan scan` (layer 1) and
+`secretscan review` (layers 2 and 3, through Vornik); layer 4 follows
 (design §7).
 
 ## Use
@@ -50,6 +51,16 @@ go run ./cmd/secretscan scan --repo . --base origin/main --head HEAD \
 
 Exit status: 0 clean, 1 findings, 2 an error (never "clean"). Findings are
 printed as path, line and rule; a value is never printed.
+
+```bash
+VORNIK_TOKEN=… GITHUB_TOKEN=… go run ./cmd/secretscan review --repo . \
+  --base origin/main --head HEAD --vornik-url https://vornik.example/api/v1/mcp/companion \
+  --prefix ns--secretscan-- --pr 42 --repository owner/name --gitleaks .tools/bin/gitleaks
+```
+
+`review` masks the diff and proves the mask, runs Vornik's four review
+workflows, checks every claim, and posts one comment. Tokens come from the
+environment only. It exits 0 whatever happened: layer 2 comments.
 
 **Ledgers** exempt a named value or path, each with its reason, one
 `<value>\t<reason>` per line: `accounts.allow` (12-digit values),

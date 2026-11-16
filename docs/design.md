@@ -114,9 +114,13 @@ digits, plain or split by `-` or spaces, with `[REDACTED:account-id]`.
 rounds, until a rescan finds nothing; a rescan that still finds something
 after five refuses the send. Triage's report of layer 1's findings carries
 each finding's masked diff line as context, never a gitleaks value field,
-and is rescanned too, as is the adjudicator's bundle. A diff is cut at file
-boundaries to at most 256 KiB; a file that does not fit is reported not
-examined.
+and is rescanned too, as is the adjudicator's bundle. **A review sends at
+most 24 KiB of diff**, whole files only, code before documentation; the
+rest is listed as not reviewed (layer 1 still scans it). Measured
+2026-11-16 on a real 77 KB diff: a hunter read it piece by piece, its
+context was trimmed between reads, and it hit Vornik's 30-iteration tool
+limit without answering. That limit is a role setting the admin tools do
+not expose.
 
 **The review** (`secretscan review`) sends the masked diff to four Vornik
 broker workflows, each one role on its own model: two independent hunters,
@@ -130,7 +134,9 @@ Every string Vornik returns arrives wrapped as
 secretscan strips exactly that and refuses any other shape.
 
 **Failing open.** Any layer 2 error ends the step successfully with a report
-that layer 2 did not complete and why. Layer 1 is unaffected.
+that layer 2 did not complete and why, naming each workflow that failed and
+its error class (never content). Layer 1 is unaffected. A mask that does
+not converge and a tool that cannot run are reported differently.
 
 **What leaves the runner.** The masked diff. A secret layer 1 misses is sent
 unmasked; on the planted set, with the structural checks, that is one kind

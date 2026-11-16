@@ -172,3 +172,32 @@ func TestRunReviewResolvesARelativeGitleaksPath(t *testing.T) {
 		t.Fatalf("a missing tool must be reported as a tool error, got %q", rv.Reason)
 	}
 }
+
+// A failed workflow names its error class in the comment (found at
+// e2e-lane: "both hunters failed" said nothing of why), and the diff cap
+// keeps code before documentation.
+func TestFailuresAreNamedAndCodeComesFirst(t *testing.T) {
+	r := newRepo(t)
+	r.write("a.go", "package a\n")
+	base := r.commit("base")
+	r.write("docs/big.md", strings.Repeat("prose line\n", 4000))
+	r.write("a.go", "package a\n\nvar x = 1\n")
+	head := r.commit("change")
+	d, not, err := changeDiff(Options{Repo: r.dir, Base: base, Head: head}, DefaultMaxDiff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(d, "var x = 1") || len(not) != 1 || not[0] != "docs/big.md" {
+		t.Fatalf("cap kept docs over code: not examined %v", not)
+	}
+	rec := &recordingVornik{out: map[string]map[string]any{
+		"hunt-a": {"status": wrap("failed")},
+		"hunt-b": {"status": wrap("failed")},
+	}}
+	srv := rec.server(t)
+	rv := RunReview(context.Background(), ReviewOptions{Scan: scanOpts(t, r, base, head), Vornik: &Vornik{URL: srv.URL, Token: "k"}, Prefix: "ns--x--", HeadSHA: head})
+	c := RenderComment(rv, 0, 0)
+	if !strings.Contains(c, "hunt-a: it reported status failed") || !strings.Contains(c, "hunt-b:") {
+		t.Fatalf("failures not named:\n%s", c)
+	}
+}

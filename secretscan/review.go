@@ -38,6 +38,9 @@ type Review struct {
 	Dropped      map[string]int
 	Triage       []Verdict
 	HunterFailed []string
+	// Failures names each workflow that did not complete and why, by error
+	// class only (never content), so a failure explains itself.
+	Failures map[string]string
 }
 
 // Verdict is a triage verdict on a layer 1 finding, after policy.
@@ -80,14 +83,14 @@ type adjudicateOutput struct {
 // RunReview runs layers 2 and 3. It never returns an error for a layer 2
 // failure: it reports it in the Review, so the caller can fail open.
 func RunReview(ctx context.Context, o ReviewOptions) *Review {
-	rv := &Review{Dropped: map[string]int{}}
+	rv := &Review{Dropped: map[string]int{}, Failures: map[string]string{}}
 	fail := func(format string, a ...any) *Review {
 		rv.Completed = false
 		rv.Reason = fmt.Sprintf(format, a...)
 		return rv
 	}
 	if o.MaxDiff == 0 {
-		o.MaxDiff = 256 << 10
+		o.MaxDiff = DefaultMaxDiff
 	}
 	if err := resolvePaths(&o.Scan); err != nil {
 		return fail("a tool could not be found (%s)", firstLine(err.Error()))
@@ -160,7 +163,15 @@ func RunReview(ctx context.Context, o ReviewOptions) *Review {
 	for wf, by := range map[string]string{"hunt-a": "a", "hunt-b": "b"} {
 		r := results[wf]
 		var h huntOutput
-		if r.err != nil || decode(r.out, &h) != nil || h.Status != "complete" {
+		switch {
+		case r.err != nil:
+			rv.Failures[wf] = firstLine(r.err.Error())
+		case decode(r.out, &h) != nil:
+			rv.Failures[wf] = "its output did not decode"
+		case h.Status != "complete":
+			rv.Failures[wf] = "it reported status " + h.Status
+		}
+		if rv.Failures[wf] != "" {
 			rv.HunterFailed = append(rv.HunterFailed, wf)
 			continue
 		}
@@ -177,6 +188,13 @@ func RunReview(ctx context.Context, o ReviewOptions) *Review {
 
 	var tri triageOutput
 	triageOK := results["triage"].err == nil && decode(results["triage"].out, &tri) == nil
+	if !triageOK {
+		if e := results["triage"].err; e != nil {
+			rv.Failures["triage"] = firstLine(e.Error())
+		} else {
+			rv.Failures["triage"] = "its output did not decode"
+		}
+	}
 	bundle, err := json.Marshal(map[string]any{"claims": rv.Verify.Candidates, "triage": tri.Verdicts})
 	if err != nil {
 		return fail("the bundle could not be built")
@@ -189,6 +207,9 @@ func RunReview(ctx context.Context, o ReviewOptions) *Review {
 	if len(rv.Verify.Candidates) > 0 || len(tri.Verdicts) > 0 {
 		r := run("adjudicate", map[string]any{"diff": m.Diff, "bundle": string(bundle), "head_sha": o.HeadSHA})
 		if r.err != nil || decode(r.out, &adj) != nil {
+			if r.err != nil {
+				rv.Failures["adjudicate"] = firstLine(r.err.Error())
+			}
 			return fail("the adjudicator did not complete")
 		}
 		for _, d := range adj.Decisions {
@@ -257,7 +278,11 @@ func changeDiff(o Options, max int) (string, []string, error) {
 	}
 	var kept strings.Builder
 	var not []string
-	for _, file := range splitFiles(string(out)) {
+	files := splitFiles(string(out))
+	// Code first, documentation last: when the cap is reached, what is left
+	// unreviewed is prose, which layer 1 still scans.
+	sort.SliceStable(files, func(i, j int) bool { return !isDoc(filePath(files[i])) && isDoc(filePath(files[j])) })
+	for _, file := range files {
 		if kept.Len()+len(file) > max {
 			not = append(not, filePath(file))
 			continue
@@ -265,6 +290,15 @@ func changeDiff(o Options, max int) (string, []string, error) {
 		kept.WriteString(file)
 	}
 	return kept.String(), not, nil
+}
+
+// DefaultMaxDiff is what one review sends at most. A 77 KB diff exceeded
+// what a hunter could read within Vornik's 30-iteration tool limit
+// (measured on a real pull request, 2026-11-16).
+const DefaultMaxDiff = 24 << 10
+
+func isDoc(p string) bool {
+	return strings.HasSuffix(p, ".md") || strings.HasSuffix(p, ".txt") || strings.HasPrefix(p, "docs/")
 }
 
 func splitFiles(d string) []string {
@@ -306,12 +340,15 @@ func RenderComment(rv *Review, maxClaims, maxChars int) string {
 	b.WriteString(CommentMarker + "\n### Secret scan: Vornik review (comment only)\n\n")
 	if !rv.Completed {
 		fmt.Fprintf(&b, "**Layer 2 did not complete:** %s. Layer 1 (the `secret-scan` job) is unaffected.\n", rv.Reason)
+		writeFailures(&b, rv.Failures)
 		return b.String()
 	}
 	fmt.Fprintf(&b, "Examined %d file(s), %d added line(s); masked %d value(s) in %d round(s) before sending. ", rv.Files, rv.Added, rv.MaskedTokens, rv.MaskRounds)
 	fmt.Fprintf(&b, "Hunter claims: %d; kept after the deterministic check: %d; confirmed by the adjudicator: %d.\n\n", rv.Claims, len(rv.Verify.Candidates), len(rv.Findings))
 	if len(rv.HunterFailed) > 0 {
-		fmt.Fprintf(&b, "Did not complete: %s, so no finding is rated high.\n\n", strings.Join(rv.HunterFailed, ", "))
+		fmt.Fprintf(&b, "Did not complete: %s, so no finding is rated high.\n", strings.Join(rv.HunterFailed, ", "))
+		writeFailures(&b, rv.Failures)
+		b.WriteString("\n")
 	}
 	if len(rv.Findings) == 0 {
 		b.WriteString("**No finding from the model review.**\n\n")
@@ -340,7 +377,7 @@ func RenderComment(rv *Review, maxClaims, maxChars int) string {
 		b.WriteString("\n")
 	}
 	if len(rv.NotExamined) > 0 {
-		fmt.Fprintf(&b, "Not examined (over the size cap): %d file(s).\n", len(rv.NotExamined))
+		fmt.Fprintf(&b, "Not reviewed by layer 2 (over its %d KiB cap; layer 1 scanned them): %d file(s).\n", DefaultMaxDiff>>10, len(rv.NotExamined))
 	}
 	var drops []string
 	for k, n := range rv.Verify.Dropped {
@@ -354,6 +391,18 @@ func RenderComment(rv *Review, maxClaims, maxChars int) string {
 		fmt.Fprintf(&b, "Dropped claims: %s.\n", strings.Join(drops, ", "))
 	}
 	return b.String()
+}
+
+func writeFailures(b *strings.Builder, f map[string]string) {
+	var keys []string
+	for k := range f {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		r := strings.NewReplacer("`", "'", "|", "/", "\n", " ", "<", "(", ">", ")").Replace(f[k])
+		fmt.Fprintf(b, "- %s: %s\n", k, r)
+	}
 }
 
 func codeSpan(s string) string {

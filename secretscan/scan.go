@@ -88,24 +88,8 @@ func (s *scanner) setup() error {
 	if s.o.Gitleaks == "" || s.o.Repo == "" || s.o.WorkDir == "" {
 		return errors.New("scan: Repo, Gitleaks and WorkDir are required")
 	}
-	// The commands below run in different directories, so every path the
-	// caller gave is made absolute first; a bare tool name is looked up.
-	var err error
-	if strings.ContainsRune(s.o.Gitleaks, filepath.Separator) {
-		s.o.Gitleaks, err = filepath.Abs(s.o.Gitleaks)
-	} else {
-		s.o.Gitleaks, err = exec.LookPath(s.o.Gitleaks)
-	}
-	if err != nil {
-		return fmt.Errorf("scan: gitleaks: %w", err)
-	}
-	for _, p := range []*string{&s.o.Repo, &s.o.WorkDir, &s.o.Config} {
-		if *p == "" {
-			continue
-		}
-		if *p, err = filepath.Abs(*p); err != nil {
-			return err
-		}
+	if err := resolvePaths(&s.o); err != nil {
+		return err
 	}
 	s.treeDir = filepath.Join(s.o.WorkDir, "tree")
 	s.hooks = filepath.Join(s.o.WorkDir, "no-hooks")
@@ -133,6 +117,32 @@ func (s *scanner) setup() error {
 	}
 	if strings.TrimSpace(string(out)) != "false" {
 		return errors.New("scan: the clone is shallow; fetch the full history (fetch-depth: 0)")
+	}
+	return nil
+}
+
+// resolvePaths makes every path in o absolute, and looks a bare gitleaks
+// name up on PATH: the commands run in different directories. Scan and
+// RunReview both call it, so the mask never sees a relative path (found at
+// e2e-lane: the review's mask ran a relative gitleaks from its scratch
+// directory).
+func resolvePaths(o *Options) error {
+	var err error
+	if strings.ContainsRune(o.Gitleaks, filepath.Separator) {
+		o.Gitleaks, err = filepath.Abs(o.Gitleaks)
+	} else {
+		o.Gitleaks, err = exec.LookPath(o.Gitleaks)
+	}
+	if err != nil {
+		return fmt.Errorf("gitleaks: %w", err)
+	}
+	for _, p := range []*string{&o.Repo, &o.WorkDir, &o.Config} {
+		if *p == "" {
+			continue
+		}
+		if *p, err = filepath.Abs(*p); err != nil {
+			return err
+		}
 	}
 	return nil
 }

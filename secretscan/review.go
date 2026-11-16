@@ -89,6 +89,9 @@ func RunReview(ctx context.Context, o ReviewOptions) *Review {
 	if o.MaxDiff == 0 {
 		o.MaxDiff = 256 << 10
 	}
+	if err := resolvePaths(&o.Scan); err != nil {
+		return fail("a tool could not be found (%s)", firstLine(err.Error()))
+	}
 	diff, notExamined, err := changeDiff(o.Scan, o.MaxDiff)
 	if err != nil {
 		return fail("the diff could not be read")
@@ -108,8 +111,11 @@ func RunReview(ctx context.Context, o ReviewOptions) *Review {
 
 	mo := MaskOptions{Diff: diff, Gitleaks: o.Scan.Gitleaks, Config: o.Scan.Config, WorkDir: o.Scan.WorkDir}
 	m, err := Mask(mo)
-	if err != nil {
+	if errors.Is(err, ErrMaskNotHeld) {
 		return fail("the mask did not hold; nothing was sent")
+	}
+	if err != nil {
+		return fail("the mask could not run (a tool error); nothing was sent")
 	}
 	rv.MaskRounds, rv.MaskedTokens = m.Rounds, m.Masked
 	masked := ParseDiff(m.Diff)

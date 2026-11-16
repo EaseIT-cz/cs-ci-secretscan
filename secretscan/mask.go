@@ -77,6 +77,9 @@ type MaskResult struct {
 	Masked int // tokens replaced
 }
 
+// ErrMaskNotHeld means rescans kept finding values: nothing may be sent.
+var ErrMaskNotHeld = errors.New("the mask did not hold")
+
 // maxRounds bounds the mask: each round masks what a rescan found, and the
 // last rescan must find nothing.
 const maxRounds = 5
@@ -120,7 +123,7 @@ func Mask(o MaskOptions) (*MaskResult, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("mask: still finding values after %d rounds; the mask did not hold", maxRounds)
+	return nil, fmt.Errorf("mask: still finding values after %d rounds: %w", maxRounds, ErrMaskNotHeld)
 }
 
 // span is a finding's place in the scanned stream: 1-based line and columns.

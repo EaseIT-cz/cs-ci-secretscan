@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -138,5 +139,36 @@ func TestChangeDiffIsFromTheMergeBase(t *testing.T) {
 	}
 	if !strings.Contains(d, "fromTheChange") || strings.Contains(d, "fromTheBase") {
 		t.Fatalf("diff is not the change's alone:\n%s", d)
+	}
+}
+
+// A relative gitleaks path reaches the mask (found at: e2e-lane, the first
+// run on a real pull request: CI passes .tools/bin/gitleaks, the mask ran
+// gitleaks from its scratch directory, failed to start it, and reported
+// "the mask did not hold"). A tool error is also reported as one.
+func TestRunReviewResolvesARelativeGitleaksPath(t *testing.T) {
+	r := newRepo(t)
+	r.write("a.go", "package a\n")
+	base := r.commit("base")
+	r.write("a.go", "package a\n\nvar x = 1\n")
+	head := r.commit("change")
+	bin := gitleaksPath(t)
+	t.Chdir(filepath.Dir(bin))
+	rec := &recordingVornik{out: map[string]map[string]any{
+		"hunt-a": {"status": wrap("complete"), "claims": []any{}},
+		"hunt-b": {"status": wrap("complete"), "claims": []any{}},
+		"triage": {"status": wrap("complete"), "verdicts": []any{}},
+	}}
+	srv := rec.server(t)
+	o := ReviewOptions{Scan: scanOpts(t, r, base, head), Vornik: &Vornik{URL: srv.URL, Token: "k"}, Prefix: "ns--x--", HeadSHA: head}
+	o.Scan.Gitleaks = "./" + filepath.Base(bin)
+	rv := RunReview(context.Background(), o)
+	if !rv.Completed {
+		t.Fatalf("relative gitleaks path: %s", rv.Reason)
+	}
+	o.Scan.Gitleaks = "./no-such-gitleaks"
+	rv = RunReview(context.Background(), o)
+	if rv.Completed || strings.Contains(rv.Reason, "did not hold") {
+		t.Fatalf("a missing tool must be reported as a tool error, got %q", rv.Reason)
 	}
 }

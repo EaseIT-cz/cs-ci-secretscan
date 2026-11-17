@@ -163,7 +163,24 @@ func TestShapeIsCheckedByFamily(t *testing.T) {
 		{Path: "k.go", Line: 2, Class: "private_key", Reason: "second half", By: "b"},
 		{Path: "k.go", Line: 3, Class: "private_key", Reason: "a word", By: "b"},
 	}, d)
-	if len(r.Candidates) != 2 || r.Dropped["no shape"] != 1 {
+	// Both halves pass the shape check (and, adjacent, merge into one
+	// finding); the plain word does not.
+	if len(r.Candidates) != 1 || len(r.Candidates[0].Reasons) != 2 || r.Dropped["no shape"] != 1 {
 		t.Fatalf("candidates %+v dropped %v", r.Candidates, r.Dropped)
+	}
+}
+
+// One hunter's claims on adjacent lines of one family are one finding: the
+// two halves of a split key are one secret (found at: e2e-lane, the planted
+// pull request: hunter_a's claims on lines 6 and 7 showed as two rows).
+func TestAdjacentClaimsOfOneHunterMerge(t *testing.T) {
+	d := ParseDiff("diff --git a/k.go b/k.go\n--- a/k.go\n+++ b/k.go\n@@ -0,0 +1,2 @@\n+\tpart1 := \"5b763fa254f83feb3fab\"\n+\tpart2 := \"0a83410be2a9a93800f6\"\n")
+	r := Verify([]Claim{
+		{Path: "k.go", Line: 1, Class: "token", Reason: "first half", By: "a"},
+		{Path: "k.go", Line: 2, Class: "token", Reason: "second half", By: "a"},
+		{Path: "k.go", Line: 1, Class: "private_key", Reason: "a split key", By: "b"},
+	}, d)
+	if len(r.Candidates) != 1 || r.Candidates[0].FoundBy != "both" || len(r.Candidates[0].Reasons) != 3 {
+		t.Fatalf("candidates %+v", r.Candidates)
 	}
 }

@@ -76,7 +76,7 @@ func Verify(claims []Claim, d ParsedDiff) VerifyResult {
 			ok = append(ok, kept{c, l.Text})
 		}
 	}
-	// Merge agreement: same path, lines within 2, same family.
+	// Merge claims on one secret: same path, lines within 2, same family.
 	used := make([]bool, len(ok))
 	var cands []Candidate
 	for i, a := range ok {
@@ -89,7 +89,10 @@ func Verify(claims []Claim, d ParsedDiff) VerifyResult {
 		reasons := []Claim{a.c}
 		for j := i + 1; j < len(ok); j++ {
 			b := ok[j]
-			if used[j] || b.c.By == a.c.By || b.c.Path != a.c.Path || abs(b.c.Line-a.c.Line) > 2 ||
+			// Any hunter's claim within 2 lines in the same family is the same
+			// secret: the other hunter's agrees, the same hunter's is its
+			// other half (a key split across adjacent lines).
+			if used[j] || b.c.Path != a.c.Path || abs(b.c.Line-a.c.Line) > 2 ||
 				families[b.c.Class] != families[a.c.Class] {
 				continue
 			}

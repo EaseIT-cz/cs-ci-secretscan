@@ -188,7 +188,10 @@ A flat 3.5-bit floor would drop 90% of 16-hex, 78% of 20-hex and 54% of
 floor removes words and repeated characters, not names: an environment
 variable name passes, and rejecting it is the adjudicator's job.
 
-**Agreement** is computed here: same path, lines within 2, same class family
+**Agreement** is computed here, and one secret is one finding: claims on the
+same path, within 2 lines, in the same class family merge, whether from the
+two hunters (agreement) or from one (the halves of a split key, which showed
+as two rows on the planted pull request). Same path, lines within 2, same class family
 (credential: `token`, `api_key`, `password`, `private_key`,
 `connection_string`, `encoded_blob`; identifier: `cloud_account_id`,
 `internal_host`, `email`). Confidence is `high` when both hunters agree and

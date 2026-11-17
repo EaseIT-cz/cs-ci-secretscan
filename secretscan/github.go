@@ -44,9 +44,12 @@ func (g *GitHub) do(ctx context.Context, method, path string, body any, into any
 		return fmt.Errorf("github %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, githubMaxResponse+1))
 	if err != nil {
 		return err
+	}
+	if len(raw) > githubMaxResponse {
+		return fmt.Errorf("github %s %s: the response exceeds %d bytes", method, path, githubMaxResponse)
 	}
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("github %s %s: HTTP %d", method, path, resp.StatusCode)
@@ -90,17 +93,31 @@ type CompletionReport struct {
 
 // Completion reads the pull requests updated in the last days and their
 // review comments (docs/design.md §6).
+// githubPage is how many pull requests one list request asks for. A full
+// pull-request object is tens of KB (body, labels, links), so 100 per page
+// passed the 1 MiB cap the client once shared with Vornik's, and the cut
+// JSON failed the first weekly self-test ("unexpected end of JSON input").
+const githubPage = 30
+
+// githubMaxResponse caps one GitHub response: room for a page of large
+// pull-request objects. A response over it is an error that says so, never
+// cut JSON.
+const githubMaxResponse = 8 << 20
+
+// githubMaxPages bounds the completion walk: 600 pull requests a week.
+const githubMaxPages = 20
+
 func (g *GitHub) Completion(ctx context.Context, since time.Time) (*CompletionReport, error) {
 	r := &CompletionReport{Reasons: map[string]int{}}
-	for page := 1; page <= 5; page++ {
+	for page := 1; page <= githubMaxPages; page++ {
 		var prs []struct {
 			Number    int       `json:"number"`
 			UpdatedAt time.Time `json:"updated_at"`
 		}
-		if err := g.do(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/pulls?state=all&sort=updated&direction=desc&per_page=100&page=%d", g.Repo, page), nil, &prs); err != nil {
+		if err := g.do(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/pulls?state=all&sort=updated&direction=desc&per_page=%d&page=%d", g.Repo, githubPage, page), nil, &prs); err != nil {
 			return nil, err
 		}
-		done := len(prs) < 100
+		done := len(prs) < githubPage
 		for _, pr := range prs {
 			if pr.UpdatedAt.Before(since) {
 				done = true

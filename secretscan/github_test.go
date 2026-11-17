@@ -84,3 +84,45 @@ func TestCompletionCountsReviewOutcomes(t *testing.T) {
 		t.Fatalf("report %+v", r)
 	}
 }
+
+// A page of full pull-request objects is large (found at: e2e-lane, the
+// first weekly self-test: 100 per page passed the 1 MB read cap and the
+// JSON was cut: "unexpected end of JSON input"). Pages are smaller now, and
+// the GitHub client's cap fits them.
+func TestCompletionReadsLargePages(t *testing.T) {
+	now := time.Now()
+	pad := strings.Repeat("x", 60000) // a PR object's body, labels and links
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/pulls") {
+			var prs []map[string]any
+			if r.URL.Query().Get("page") == "1" {
+				for i := 1; i <= githubPage; i++ {
+					prs = append(prs, map[string]any{"number": i, "updated_at": now.Add(-time.Hour), "body": pad})
+				}
+			}
+			json.NewEncoder(w).Encode(prs)
+			return
+		}
+		json.NewEncoder(w).Encode([]map[string]string{{"body": CommentMarker + "\nExamined 1 file(s)"}})
+	}))
+	defer srv.Close()
+	r, err := (&GitHub{API: srv.URL, Repo: "o/r", Token: "t"}).Completion(context.Background(), now.Add(-7*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.PRs != githubPage || r.Completed != githubPage {
+		t.Fatalf("report %+v", r)
+	}
+}
+
+// A response over the cap is an error that names the cap, never cut JSON.
+func TestGitHubResponseOverTheCap(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`[{"body":"` + strings.Repeat("x", githubMaxResponse) + `"}]`))
+	}))
+	defer srv.Close()
+	_, err := (&GitHub{API: srv.URL, Repo: "o/r", Token: "t"}).Completion(context.Background(), time.Now())
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("err %v", err)
+	}
+}

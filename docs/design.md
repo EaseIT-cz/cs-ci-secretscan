@@ -124,8 +124,13 @@ not expose.
 
 **The review** (`secretscan review`) sends the masked diff to four Vornik
 broker workflows, each one role on its own model: two independent hunters,
-a triager for layer 1's findings, and an adjudicator. The hunters and the
-triager run at once; the adjudicator runs after layer 3. Separate workflows,
+a triager for layer 1's findings, and an adjudicator. The client submits the
+hunters and the triager at once; the adjudicator runs after layer 3.
+*Corrected 2026-11-17:* Vornik runs them one at a time, because the admin
+tools create a project with `maxConcurrentTasks: 1` and cannot change it
+(measured on the weekly self-test: four roles end to end in 3 min 10 s,
+each starting within 2 s of the previous one ending; about 1 min 50 s if
+the first three ran together; Vornik issue #798). Separate workflows,
 because a Vornik workflow hands each step only the previous step's output
 (measured: in one four-step workflow, the first hunter's claims never
 reached the adjudicator, and the second hunter could read the first's).

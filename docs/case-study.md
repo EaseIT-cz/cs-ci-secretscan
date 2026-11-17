@@ -124,6 +124,9 @@ Found while building, filed with Vornik's maintainers:
   and recreated.
 - Roles' iteration and token limits are not settable through the admin
   tools, so long diffs are cut rather than read whole.
+- A project's task concurrency is fixed at one, so the four roles run in
+  turn: 3 min 10 s for a review that would take about 1 min 50 s with the
+  first three together.
 
 ## Try it
 

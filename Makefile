@@ -16,6 +16,12 @@ lint:
 test: tools
 	go test -race -count=1 -cover ./...
 
-## selfscan: this repository scanned by its own layer 1.
+## selfscan: this repository scanned by its own layer 1, as the working tree
+## stands. The scan reads git's index, so it runs on a temporary copy of the
+## index with every change staged (GIT_INDEX_FILE): the real index is left
+## alone, and a new or modified file is never skipped (found: a published file
+## was missed when the scan ran before it was staged).
 selfscan: tools
-	go run ./cmd/secretscan scan --repo . --gitleaks $(GITLEAKS) --ledgers ledgers
+	@idx=$$(mktemp) && trap 'rm -f "$$idx"' EXIT && cp "$$(git rev-parse --git-path index)" "$$idx" && \
+	  GIT_INDEX_FILE="$$idx" git add -A && \
+	  GIT_INDEX_FILE="$$idx" go run ./cmd/secretscan scan --repo . --gitleaks $(GITLEAKS) --ledgers ledgers

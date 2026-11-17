@@ -54,8 +54,8 @@ func randHex(nBytes int) string {
 
 func randAccount() string {
 	for {
-		n, _ := rand.Int(rand.Reader, big.NewInt(800000000000))
-		v := fmt.Sprintf("%012d", n.Int64()+100000000000)
+		n, _ := rand.Int(rand.Reader, big.NewInt(800_000_000_000))
+		v := fmt.Sprintf("%012d", n.Int64()+100_000_000_000)
 		if v != "111122223333" {
 			return v
 		}

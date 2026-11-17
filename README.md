@@ -68,6 +68,14 @@ environment only. It exits 0 whatever happened: layer 2 comments.
 `names.allow` (key-file paths), `skip.allow` (files exempt from the stdin
 rescan).
 
+## Read more
+
+- [The case study](docs/case-study.md): Vornik building and operating this,
+  with every figure measured.
+- [The adoption guide](docs/guide.md): set it up on a repository that uses
+  Vornik.
+- [The design](docs/design.md).
+
 ## Develop
 
 `make check` runs gofmt, `go vet`, the tests (which drive the real gitleaks)

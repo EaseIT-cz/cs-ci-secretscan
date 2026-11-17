@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUpsertCreatesThenUpdates(t *testing.T) {
@@ -51,5 +52,35 @@ func TestUpsertCreatesThenUpdates(t *testing.T) {
 	}
 	if err := (&GitHub{API: srv.URL, Repo: "o/r", Token: "bad"}).Upsert(ctx, 5, "x"); err == nil {
 		t.Fatal("a refused token must be an error")
+	}
+}
+
+func TestCompletionCountsReviewOutcomes(t *testing.T) {
+	now := time.Now()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/pulls"):
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"number": 1, "updated_at": now.Add(-time.Hour)},
+				{"number": 2, "updated_at": now.Add(-2 * time.Hour)},
+				{"number": 3, "updated_at": now.Add(-3 * time.Hour)},
+				{"number": 4, "updated_at": now.Add(-30 * 24 * time.Hour)},
+			})
+		case strings.Contains(r.URL.Path, "/issues/1/"):
+			json.NewEncoder(w).Encode([]map[string]string{{"body": CommentMarker + "\nExamined 3 file(s)"}})
+		case strings.Contains(r.URL.Path, "/issues/2/"):
+			json.NewEncoder(w).Encode([]map[string]string{{"body": CommentMarker + "\n**Layer 2 did not complete:** both hunters failed. Layer 1 is unaffected."}})
+		default:
+			json.NewEncoder(w).Encode([]map[string]string{})
+		}
+	}))
+	defer srv.Close()
+	g := &GitHub{API: srv.URL, Repo: "o/r", Token: "t"}
+	r, err := g.Completion(context.Background(), now.Add(-7*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.PRs != 3 || r.Completed != 1 || r.NoComment != 1 || r.Reasons["both hunters failed"] != 1 {
+		t.Fatalf("report %+v", r)
 	}
 }

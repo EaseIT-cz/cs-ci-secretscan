@@ -46,7 +46,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: secretscan scan|review|comment [flags]")
+		fmt.Fprintln(stderr, "usage: secretscan scan|review|comment|selftest|sweep|completion [flags]")
 		return 2
 	}
 	switch args[0] {
@@ -54,9 +54,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runReview(args[1:], stdout, stderr)
 	case "comment":
 		return runComment(args[1:], stderr)
+	case "selftest":
+		return runSelftest(args[1:], stdout, stderr)
+	case "sweep":
+		return runSweep(args[1:], stdout, stderr)
+	case "completion":
+		return runCompletion(args[1:], stdout, stderr)
 	case "scan":
 	default:
-		fmt.Fprintln(stderr, "usage: secretscan scan|review|comment [flags]")
+		fmt.Fprintln(stderr, "usage: secretscan scan|review|comment|selftest|sweep|completion [flags]")
 		return 2
 	}
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)

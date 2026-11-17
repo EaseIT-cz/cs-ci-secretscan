@@ -37,9 +37,10 @@ Measured with gitleaks 8.30.1 (details in [docs/design.md](docs/design.md) §2):
 | 3 | every model claim and reason checked against the diff, deterministically | drops what it cannot tie to the diff |
 | 4 | a planted set of fake secrets and decoys that measures layers 1 to 3 | fails a scheduled run |
 
-Status: **layers 1 to 3 are built**: `secretscan scan` (layer 1) and
-`secretscan review` (layers 2 and 3, through Vornik); layer 4 follows
-(design §7).
+Status: **all four layers are built**: `secretscan scan` (layer 1),
+`secretscan review` (layers 2 and 3, through Vornik), and `secretscan
+selftest`, `sweep` and `completion` (layer 4, the planted set and the
+denominators) (design §6, §7).
 
 ## Use
 

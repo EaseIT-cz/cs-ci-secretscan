@@ -211,13 +211,40 @@ stays `real_secret` whatever a model says.
 
 ## 6. Layer 4: the planted set
 
-`secretscan corpus` writes a fresh planted set with random fake values: the
-seven kinds of §2; a token in a commit message, in a path, in a binary file
-and in a gitleaks config; and decoys (a sha256 under a `*_sha` name, an
-environment lookup, an AWS documentation id, a public key fingerprint). A
-consumer's scheduled run requires layer 1 to find every plant in its classes
-and flag no decoy, and searches every output for every planted value, with a
-positive control.
+A fresh corpus is written at every run (`NewCorpus`): a git repository with
+a base commit and a commit of plants, all values random and fake, and no
+comment calling them fake, since models dismiss a value so labelled
+(measured on a planted pull request). The plants:
+
+| layer | plants |
+|---|---|
+| 1 | a GitHub token; an AWS secret key; a token under a key name; a URL with a password; an account id; a base64-encoded token; a key-file name; a PEM header; a token in a binary file, in a gitleaks config, in a commit message and in a path |
+| 2 | a key split across two string literals |
+| decoys | a sha256 under a `*_sha` name; AWS's documentation id (listed in the ledger); an environment lookup |
+
+**Each rule-detectable value is drawn until gitleaks detects it.** gitleaks'
+generic rule drops 1.1% of random 40-character tokens under a key name by
+its stopword allowlist (23 of 2,000, measured 2026-11-16); no alphabet
+avoids it (uppercase and digits: 99.2% found; lowercase hex: 94.6%; digits:
+0%). So the gate tests the pipeline (export, balance, rescans, line
+mapping) deterministically, and the rule's miss rate is a reported fact,
+not a flaky gate.
+
+- **`selftest layer1`** (nightly): every layer 1 plant found with its rule;
+  no decoy flagged; an empty tree and a shallow clone refused; the wrapper
+  parser accepts Vornik's wrapper and refuses another; an injected reason
+  (a mention and a link) is withheld from the comment. Exit 1 on any miss.
+- **`selftest layer2`** (weekly): the corpus's change through the real
+  Vornik review; it fails when the review does not complete, when the split
+  key is not confirmed, or when a decoy is. With a floors file
+  (`FLOOR_DETECTIONS`, `CEILING_DECOYS`, set by the operator after four
+  runs) it also fails below the floor or above the ceiling.
+- **`sweep`**: searches the given files for every planted value, after
+  planting one in a control file of its own; a missing control or any hit
+  fails.
+- **`completion`**: of the pull requests updated in the last days, how many
+  carry a completed review comment, with each other reason; it fails when
+  some carried one and none completed.
 
 ## 7. The command
 
@@ -225,7 +252,7 @@ positive control.
 |---|---|
 | `scan`: layer 1 | built in stage 1 |
 | `review`: layers 2 and 3 (mask, Vornik, verify, comment) | built in stage 2 |
-| `corpus` | stage 3 |
+| `selftest layer1`, `selftest layer2`, `sweep`, `completion`: layer 4 | built in stage 3 |
 
 Exit codes: 0 clean, 1 findings, 2 a tool or usage error (never "clean").
 

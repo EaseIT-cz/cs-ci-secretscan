@@ -79,3 +79,72 @@ func (g *GitHub) Upsert(ctx context.Context, pr int, body string) error {
 	}
 	return g.do(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/issues/%d/comments", g.Repo, pr), map[string]string{"body": body}, nil)
 }
+
+// CompletionReport is layer 2's own denominator: of the pull requests
+// updated in a window, how many carry a review comment that completed.
+type CompletionReport struct {
+	PRs, Completed int
+	NoComment      int
+	Reasons        map[string]int // why layer 2 did not complete, by reason
+}
+
+// Completion reads the pull requests updated in the last days and their
+// review comments (docs/design.md §6).
+func (g *GitHub) Completion(ctx context.Context, since time.Time) (*CompletionReport, error) {
+	r := &CompletionReport{Reasons: map[string]int{}}
+	for page := 1; page <= 5; page++ {
+		var prs []struct {
+			Number    int       `json:"number"`
+			UpdatedAt time.Time `json:"updated_at"`
+		}
+		if err := g.do(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/pulls?state=all&sort=updated&direction=desc&per_page=100&page=%d", g.Repo, page), nil, &prs); err != nil {
+			return nil, err
+		}
+		done := len(prs) < 100
+		for _, pr := range prs {
+			if pr.UpdatedAt.Before(since) {
+				done = true
+				break
+			}
+			r.PRs++
+			body, err := g.reviewComment(ctx, pr.Number)
+			if err != nil {
+				return nil, err
+			}
+			switch {
+			case body == "":
+				r.NoComment++
+			case strings.Contains(body, "Layer 2 did not complete:"):
+				reason := body[strings.Index(body, "Layer 2 did not complete:")+len("Layer 2 did not complete:"):]
+				reason, _, _ = strings.Cut(strings.TrimSpace(strings.TrimPrefix(reason, "**")), ".")
+				r.Reasons[strings.TrimSpace(reason)]++
+			default:
+				r.Completed++
+			}
+		}
+		if done {
+			break
+		}
+	}
+	return r, nil
+}
+
+func (g *GitHub) reviewComment(ctx context.Context, pr int) (string, error) {
+	for page := 1; page <= 10; page++ {
+		var comments []struct {
+			Body string `json:"body"`
+		}
+		if err := g.do(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/issues/%d/comments?per_page=100&page=%d", g.Repo, pr, page), nil, &comments); err != nil {
+			return "", err
+		}
+		for _, c := range comments {
+			if strings.HasPrefix(c.Body, CommentMarker) {
+				return c.Body, nil
+			}
+		}
+		if len(comments) < 100 {
+			break
+		}
+	}
+	return "", nil
+}

@@ -155,3 +155,61 @@ func TestCommentRefusesWhatReviewDidNotWrite(t *testing.T) {
 		t.Fatalf("usage: exit %d, want 2", code)
 	}
 }
+
+func TestSelftestLayer1AndSweepCommands(t *testing.T) {
+	dir := t.TempDir()
+	values := filepath.Join(dir, "values")
+	out := filepath.Join(dir, "out.txt")
+	f, _ := os.Create(out)
+	code := run([]string{"selftest", "layer1", "--gitleaks", gitleaksBin(t), "--values", values}, f, io.Discard)
+	f.Close()
+	if code != 0 {
+		b, _ := os.ReadFile(out)
+		t.Fatalf("selftest layer1: exit %d\n%s", code, b)
+	}
+	var sw bytes.Buffer
+	if code := run([]string{"sweep", "--values", values, out}, &sw, io.Discard); code != 0 {
+		t.Fatalf("sweep of the self-test's own output: exit %d\n%s", code, sw.String())
+	}
+	if !strings.Contains(sw.String(), "positive control found: true") {
+		t.Fatalf("sweep: %s", sw.String())
+	}
+	if code := run([]string{"sweep", "--values", values, values}, io.Discard, io.Discard); code != 1 {
+		t.Fatalf("a sweep of the values file itself must find them: exit %d", code)
+	}
+}
+
+func TestReadFloors(t *testing.T) {
+	f, err := readFloors(filepath.Join(t.TempDir(), "absent.env"))
+	if err != nil || f.Set {
+		t.Fatalf("absent file: %+v %v", f, err)
+	}
+	p := filepath.Join(t.TempDir(), "floors.env")
+	os.WriteFile(p, []byte("# set after four weekly runs\nFLOOR_DETECTIONS=1\nCEILING_DECOYS=0\n"), 0o644)
+	if f, err = readFloors(p); err != nil || !f.Set || f.MinDetections != 1 || f.MaxDecoys != 0 {
+		t.Fatalf("floors %+v %v", f, err)
+	}
+	os.WriteFile(p, []byte("FLOOR_DETECTIONS=1\n"), 0o644)
+	if f, _ = readFloors(p); f.Set {
+		t.Fatal("one key alone does not set the floors")
+	}
+	os.WriteFile(p, []byte("FLOOR_DETECTIONS=many\nCEILING_DECOYS=0\n"), 0o644)
+	if _, err = readFloors(p); err == nil {
+		t.Fatal("a non-number must be an error")
+	}
+}
+
+func TestLayer4UsageErrors(t *testing.T) {
+	t.Setenv("VORNIK_TOKEN", "")
+	for _, args := range [][]string{
+		{"selftest"},
+		{"selftest", "layer3"},
+		{"selftest", "layer2", "--vornik-url", "http://x", "--prefix", "p"},
+		{"sweep"},
+		{"completion"},
+	} {
+		if code := run(args, io.Discard, io.Discard); code != 2 {
+			t.Errorf("%v: exit %d, want 2", args, code)
+		}
+	}
+}

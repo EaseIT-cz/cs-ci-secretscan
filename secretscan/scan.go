@@ -128,13 +128,8 @@ func (s *scanner) setup() error {
 // directory).
 func resolvePaths(o *Options) error {
 	var err error
-	if strings.ContainsRune(o.Gitleaks, filepath.Separator) {
-		o.Gitleaks, err = filepath.Abs(o.Gitleaks)
-	} else {
-		o.Gitleaks, err = exec.LookPath(o.Gitleaks)
-	}
-	if err != nil {
-		return fmt.Errorf("gitleaks: %w", err)
+	if o.Gitleaks, err = toolPath(o.Gitleaks); err != nil {
+		return err
 	}
 	for _, p := range []*string{&o.Repo, &o.WorkDir, &o.Config} {
 		if *p == "" {
@@ -145,6 +140,28 @@ func resolvePaths(o *Options) error {
 		}
 	}
 	return nil
+}
+
+// toolPath resolves a tool reference to an absolute path: a path is made
+// absolute, a bare name is looked up on PATH. Every gitleaks run calls it,
+// because the runs happen in other directories (a scratch export, a corpus,
+// the repository): a relative path broke the review's mask, then the
+// self-test's corpus, before this was made the one place (three bugs of
+// one class, found at e2e-lane).
+func toolPath(p string) (string, error) {
+	var (
+		abs string
+		err error
+	)
+	if strings.ContainsRune(p, filepath.Separator) {
+		abs, err = filepath.Abs(p)
+	} else {
+		abs, err = exec.LookPath(p)
+	}
+	if err != nil {
+		return "", fmt.Errorf("gitleaks: %w", err)
+	}
+	return abs, nil
 }
 
 // git runs git with no system or global config and no hooks, so nothing
@@ -186,7 +203,11 @@ func (s *scanner) gitleaks(dir string, stdin []byte, args ...string) (string, []
 	defer os.Remove(report.Name())
 	full := append(args, "--config", s.config, "--no-banner", "--redact", "--log-level", "debug",
 		"--report-format", "json", "--report-path", report.Name())
-	cmd := exec.Command(s.o.Gitleaks, full...)
+	bin, err := toolPath(s.o.Gitleaks)
+	if err != nil {
+		return "", nil, err
+	}
+	cmd := exec.Command(bin, full...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
 	if stdin != nil {

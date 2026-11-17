@@ -213,3 +213,16 @@ func TestLayer4UsageErrors(t *testing.T) {
 		}
 	}
 }
+
+// The self-test with a relative --gitleaks, as CI passes it (found at:
+// e2e-lane, the first scheduled run: the corpus ran gitleaks from its own
+// directory and could not start it; the third bug of this class, so every
+// gitleaks run now resolves its path itself).
+func TestSelftestWithARelativeGitleaksPath(t *testing.T) {
+	bin := gitleaksBin(t)
+	t.Chdir(filepath.Dir(bin))
+	var out, errb bytes.Buffer
+	if code := run([]string{"selftest", "layer1", "--gitleaks", "./" + filepath.Base(bin)}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out.String(), errb.String())
+	}
+}

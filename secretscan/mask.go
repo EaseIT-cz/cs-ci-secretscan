@@ -234,7 +234,11 @@ func runGitleaksStdin(gitleaks, config, workDir string, data []byte) ([]glSpan, 
 	if config != "" {
 		args = append(args, "--config", config)
 	}
-	cmd := exec.Command(gitleaks, args...)
+	bin, err := toolPath(gitleaks)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(bin, args...)
 	cmd.Dir = workDir
 	cmd.Stdin = bytes.NewReader(data)
 	var log bytes.Buffer
